@@ -1,5 +1,5 @@
 # Hi, I'm Aiden
-This is my CS portfolio.
+This is my CS portfolio. (Disclaimer: this is a very incomplete portfolio, for project examples right now I can email them)
 ---
 I'm a Computer Science student passionate about building software, solving problems, and learning new technologies. This repo serves as my **portfolio**, showcasing selected projects I've worked on.
 ---
