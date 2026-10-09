@@ -1,0 +1,93 @@
+import requests
+import json
+from bs4 import BeautifulSoup
+from protego import Protego
+
+robotTxt = "" # put your robots.txt link here
+index_url = "" # put your index page url here
+json_file = "reviews.jl"
+
+headers = {"User-Agent" : ""} # put your browser agent here
+
+def get_data(soup, tag, attributes, value = None):
+    element = soup.find(tag, attributes)
+
+    if element is None:
+        return ""
+
+    if value is None:
+        return element.get_text(" ", strip = True)
+
+    return element.get(value, "")
+
+scraped_urls = []
+
+try:
+    with open(json_file, "r") as file:
+        for line in file:
+            saved_data = json.loads(line)
+            scraped_urls.append(saved_data["url"])
+except FileNotFoundError:
+    pass
+
+response = requests.get(robotTxt, headers=headers)
+robots = Protego.parse(response.text)
+
+for page in range(1, 11):
+    if page == 1:
+        page_url = index_url
+    else:
+        page_url = index_url + "page/" + str(page) + "/"
+
+    index_response = requests.get(page_url, headers=headers)
+    index_soup = BeautifulSoup(index_response.text, "html.parser")
+    review_links = index_soup.find_all("a", rel="bookmark")
+    review_urls = []
+
+    for link in review_links:
+        url = link.get("href")
+
+        if url is not None:
+            print(url)
+            review_urls.append(url)
+
+    for item_url in review_urls:
+        if item_url in scraped_urls:
+            continue
+
+        item_allowed = robots.can_fetch(item_url, headers["User-Agent"])
+
+        if not item_allowed:
+            continue
+
+        item_response = requests.get(item_url, headers=headers)
+        item_soup = BeautifulSoup(item_response.text, "html.parser")
+
+        title = get_data(item_soup, "h1", {"class": "entry-title"})
+        author = get_data(item_soup, "strong", {"class": "fn"})
+        date = get_data(item_soup, "time", {"class": "published"}, "content")
+        description = get_data(item_soup, "meta", {"property": "og:description"}, "content")
+        image = get_data(item_soup, "meta", {"property": "og:image"}, "content")
+        category = get_data(item_soup, "div", {"class": "entry-categories"})
+        tags = get_data(item_soup, "div", {"class": "entry-tags"})
+        review = get_data(item_soup, "div", {"class": "entry-content"})
+        word_count = len(review.split())
+
+        data = {
+            "url": item_url,
+            "title": title,
+            "author": author,
+            "date": date,
+            "description": description,
+            "image": image,
+            "category": category,
+            "tags": tags,
+            "review": review,
+            "word_count": word_count
+        }
+        
+        json_line = json.dumps(data)
+        with open(json_file, "a") as file:
+            file.write(json_line + "\n")
+
+        scraped_urls.append(item_url)
