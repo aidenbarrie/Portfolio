@@ -1,0 +1,94 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from protego import Protego
+import requests
+import time
+import json
+
+robotTxt = "" # put robot.txt link here
+index_url = "" # put index link here
+json_file = "selenium_reviews.jl"
+
+headers = {"User-Agent" : ""} # put browser agent here
+
+driver = webdriver.Firefox()
+
+def get_data(driver, by, selector, attribute=None):
+    elements = driver.find_elements(by, selector)
+
+    if len(elements) == 0:
+        return ""
+
+    if attribute is None:
+        return elements[0].text
+
+    value = elements[0].get_attribute(attribute)
+
+    if value is None:
+        return ""
+
+    return value
+
+response = requests.get(robotTxt, headers=headers)
+robots = Protego.parse(response.text)
+
+allowed = robots.can_fetch(index_url, headers["User-Agent"])
+
+if allowed:
+    driver.get(index_url)
+
+    review_urls = []
+
+    while len(review_urls) < 100:
+        review_elements = driver.find_elements(By.CSS_SELECTOR, 'a[rel="bookmark"]')
+
+        for element in review_elements:
+            url = element.get_attribute("href")
+
+            if url is not None and url not in review_urls:
+                review_urls.append(url)
+
+        if len(review_urls) >= 100:
+            break
+        
+        time.sleep(2)
+
+        next_button = driver.find_element(By.XPATH, "//a[contains(@class, 'next') and contains(@class, 'page-numbers')]")
+        next_button.click()
+    review_urls = review_urls[:100]
+
+    with open(json_file, "w") as file:
+        for review_url in review_urls:
+            if not robots.can_fetch(review_url, headers["User-Agent"]):
+                continue
+            time.sleep(2)
+            driver.get(review_url)
+
+            title = get_data(driver, By.CSS_SELECTOR, "h1.entry-title")
+            author = get_data(driver, By.CSS_SELECTOR, "strong.fn")
+            date = get_data(driver, By.CSS_SELECTOR, "time.published", "content")
+            description = get_data(driver, By.CSS_SELECTOR, 'meta[property="og:description"]', "content")
+            image = get_data(driver, By.CSS_SELECTOR, 'meta[property="og:image"]', "content")
+            category = get_data(driver, By.CSS_SELECTOR, "div.entry-categories a")
+            tag_elements = driver.find_elements(By.CSS_SELECTOR, "div.entry-tags a")
+            tags = []
+            for element in tag_elements:
+                tags.append(element.text)
+            review = get_data(driver, By.CSS_SELECTOR, "div.entry-content")
+            word_count = len(review.split())
+
+            data = {
+                "url": driver.current_url,
+                "title": title,
+                "author": author,
+                "date": date,
+                "description": description,
+                "image": image,
+                "category": category,
+                "tags": tags,
+                "review": review,
+                "word_count": word_count
+            }
+
+            file.write(json.dumps(data) + "\n")
+driver.quit()
