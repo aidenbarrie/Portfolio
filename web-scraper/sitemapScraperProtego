@@ -1,0 +1,30 @@
+import requests
+import xml.etree.ElementTree as ET
+from protego import Protego
+
+robottxt = "" # put your robot txt link here
+
+headers = {"User-Agent" : ""} # put browser agent here
+
+response = requests.get(robottxt, headers=headers)
+
+robots = Protego.parse(response.text)
+sitemap_left = list(robots.sitemaps)
+all_urls = []
+
+while sitemap_left:
+    sitemap = sitemap_left.pop(0)
+    print(sitemap)
+
+    response = requests.get(sitemap, headers=headers)
+    root = ET.fromstring(response.content)
+
+    for i in root.iter():
+        if i.tag.endswith("loc"):
+            if root.tag.endswith("sitemapindex"):
+                sitemap_left.append(i.text)
+            elif root.tag.endswith("urlset"):
+                all_urls.append(i.text)
+
+for url in all_urls:
+    print(url)
